@@ -50,7 +50,6 @@ def create_data():
 
     # 获取表单数据
     case_description = request.form.get('caseDescription')
-    file_size = request.form.get('fileSize')
     data_type = request.form.get('dataType', 'chest_xray')
 
     if not case_description:
@@ -65,7 +64,6 @@ def create_data():
     data_obj, error = FederatedDataService.create_data(
         case_description=case_description,
         image_url=image_url,
-        file_size=file_size,
         data_type=data_type
     )
 

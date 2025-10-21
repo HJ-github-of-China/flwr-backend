@@ -8,14 +8,13 @@ class FederatedDataService:
     """数据管理"""
 
     @staticmethod
-    def create_data(case_description, image_url, file_size, data_type= "chest_xray"):
+    def create_data(case_description, image_url, data_type= "chest_xray"):
         """创建新数据"""
         try:
 
             data = FederatedData(
                 case_description=case_description,
                 image_url=image_url,
-                file_size=file_size,
                 data_type=data_type,
                 upload_time=datetime.now()
             )

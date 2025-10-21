@@ -39,7 +39,6 @@ class FederatedData(db.Model):
     image_url = db.Column(db.String(500), nullable=False, comment='原始图片URL')
     case_description = db.Column(db.Text, nullable=False, comment='病情描述')
     data_type = db.Column(db.String(20), default='chest_xray', comment='图片类型')
-    file_size = db.Column(db.BigInteger, comment='文件大小(字节)')
     upload_time = db.Column(db.DateTime, default=datetime.now, nullable=False, comment='上传时间')
     data_status = db.Column(db.String(20), default='pending', comment='数据状态')
     is_deleted = db.Column(db.Boolean, default=False, comment='软删除标记')
@@ -52,7 +51,6 @@ class FederatedData(db.Model):
             'imageUrl': self.image_url,
             'caseDescription': self.case_description,
             'dataType': self.data_type,
-            'fileSize': self.file_size,
             'uploadTime': self.upload_time.strftime('%Y-%m-%d %H:%M:%S') if self.upload_time else None,
             'dataStatus': self.data_status,
             'updatedTime': self.updated_time.strftime('%Y-%m-%d %H:%M:%S') if self.updated_time else None
