@@ -2,6 +2,7 @@ import os
 import uuid
 import base64
 import io
+import logging
 from datetime import datetime
 from flask import current_app
 import requests
@@ -12,6 +13,9 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from app.services.oss_service import OSSService
 from app.utils import FileUtil
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 class DiagnosisService:
@@ -40,12 +44,18 @@ class DiagnosisService:
 
             # 上传PDF到OSS（可选）
             pdf_url = None
-            print(current_app.config.get('ENABLE_OSS'))
             if current_app.config.get('ENABLE_OSS'):
                 try:
-                    pdf_url = OSSService().upload_pdf(pdf_buffer, f"diagnosis/{diagnosis_id}.pdf")
+                    from app.services.oss_service import oss_service
+                    pdf_url = oss_service.upload_pdf(pdf_buffer, f"diagnosis/{diagnosis_id}.pdf")
+                    if pdf_url:
+                        logger.info(f"诊断报告PDF已上传到OSS: {pdf_url}")
+                    else:
+                        logger.warning("上传PDF到OSS失败，将保存到本地")
+                        # 如果上传OSS失败，则保存到本地
+                        pdf_url = cls._save_pdf_locally(pdf_buffer, diagnosis_id)
                 except Exception as e:
-                    print(f"上传PDF到OSS失败: {str(e)}")
+                    logger.error(f"上传PDF到OSS失败: {str(e)}", exc_info=True)
                     # 如果上传OSS失败，则保存到本地
                     pdf_url = cls._save_pdf_locally(pdf_buffer, diagnosis_id)
 
@@ -73,6 +83,7 @@ class DiagnosisService:
             }
 
         except Exception as e:
+            logger.error(f"诊断处理失败: {str(e)}", exc_info=True)
             raise Exception(f"诊断处理失败: {str(e)}")
 
     @classmethod
@@ -93,10 +104,8 @@ class DiagnosisService:
 
             请提供专业的诊断报告，包括以下部分：
             1. 请你判断是否有病人是否患病 
-            2. 影像描述 (暂时不用回答)
-            3. 影像学表现  (暂时不用回答)
-            4. 诊断意见
-            5. 建议
+            2. 诊断意见
+            3. 建议
 
             要求：
             1. 使用直白、准确的医学语言进行描述，不用太专业
@@ -157,8 +166,10 @@ class DiagnosisService:
                 return "模型返回格式异常，无法生成诊断报告。"
 
         except requests.exceptions.RequestException as e:
+            logger.error(f"调用大模型API失败: {str(e)}", exc_info=True)
             raise Exception(f"调用大模型API失败: {str(e)}")
         except Exception as e:
+            logger.error(f"处理模型响应时出错: {str(e)}", exc_info=True)
             raise Exception(f"处理模型响应时出错: {str(e)}")
 
     @classmethod
@@ -210,6 +221,16 @@ class DiagnosisService:
                     fontName=chinese_font
                 ))
 
+            if 'CustomHeading2' not in styles:
+                styles.add(ParagraphStyle(
+                    name='CustomHeading2',
+                    parent=styles['Heading2'],
+                    fontSize=14,
+                    textColor=colors.darkblue,
+                    spaceAfter=20,
+                    fontName=chinese_font
+                ))
+
             if 'CustomBodyText' not in styles:
                 styles.add(ParagraphStyle(
                     name='CustomBodyText',
@@ -255,14 +276,15 @@ class DiagnosisService:
                 story.append(Spacer(1, 0.3 * inch))
 
             # 临床信息
-            clinical_heading = Paragraph("临床信息", styles['Heading2'])
+            # 临床信息
+            clinical_heading = Paragraph("临床信息", styles['CustomHeading2'])
             story.append(clinical_heading)
             clinical_content = Paragraph(clinical_info, styles['CustomBodyText'])
             story.append(clinical_content)
             story.append(Spacer(1, 0.2 * inch))
 
             # 诊断报告
-            diagnosis_heading = Paragraph("诊断报告", styles['Heading2'])
+            diagnosis_heading = Paragraph("诊断报告", styles['CustomHeading2'])
             story.append(diagnosis_heading)
 
             # 处理诊断报告内容，确保即使为空也能正常生成PDF
@@ -283,7 +305,7 @@ class DiagnosisService:
 
         except Exception as e:
             # 记录异常信息，但仍尝试生成一个基本的PDF
-            print(f"生成PDF报告时出错: {str(e)}")
+            logger.error(f"生成PDF报告时出错: {str(e)}", exc_info=True)
             try:
                 buffer = io.BytesIO()
                 doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -299,6 +321,16 @@ class DiagnosisService:
                         fontName='Helvetica'
                     ))
 
+                if 'CustomHeading2' not in styles:
+                    styles.add(ParagraphStyle(
+                        name='CustomHeading2',
+                        parent=styles['Heading2'],
+                        fontSize=14,
+                        textColor=colors.darkblue,
+                        spaceAfter=20,
+                        fontName='Helvetica'
+                    ))
+
                 story = []
                 title = Paragraph("肺结核影像诊断报告", styles['CustomTitle'])
                 story.append(title)
@@ -311,6 +343,7 @@ class DiagnosisService:
                 buffer.seek(0)
                 return buffer
             except Exception as inner_e:
+                logger.error(f"生成PDF报告失败: {str(inner_e)}", exc_info=True)
                 raise Exception(f"生成PDF报告失败: {str(inner_e)}")
 
     @classmethod
@@ -335,7 +368,7 @@ class DiagnosisService:
             # 返回相对路径URL
             return f"/docs/{filename}"
         except Exception as e:
-            print(f"保存PDF到本地失败: {str(e)}")
+            logger.error(f"保存PDF到本地失败: {str(e)}", exc_info=True)
             return None
 
     @classmethod
@@ -359,6 +392,7 @@ class DiagnosisService:
             return pdf_buffer
 
         except Exception as e:
+            logger.error(f"获取PDF报告失败: {str(e)}", exc_info=True)
             raise Exception(f"获取PDF报告失败: {str(e)}")
 
     @classmethod
@@ -405,6 +439,7 @@ class DiagnosisService:
             }
 
         except Exception as e:
+            logger.error(f"获取诊断历史失败: {str(e)}", exc_info=True)
             raise Exception(f"获取诊断历史失败: {str(e)}")
 
     @classmethod
@@ -428,4 +463,5 @@ class DiagnosisService:
             }
 
         except Exception as e:
+            logger.error(f"获取诊断详情失败: {str(e)}", exc_info=True)
             raise Exception(f"获取诊断详情失败: {str(e)}")

@@ -35,6 +35,12 @@ class Config:
     DEFAULT_PAGE_SIZE = 10
     MAX_PAGE_SIZE = 100
 
+    # 日志配置
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+    LOG_FILE_BACKUP_COUNT = 10
+    ACCESS_LOG_FILE_BACKUP_COUNT = 30
+
     ENABLE_OSS = os.getenv('ENABLE_OSS', 'false').lower() == 'true'
 
     # 大模型API配置
