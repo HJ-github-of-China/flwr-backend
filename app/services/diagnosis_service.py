@@ -40,6 +40,7 @@ class DiagnosisService:
 
             # 上传PDF到OSS（可选）
             pdf_url = None
+            print(current_app.config.get('ENABLE_OSS'))
             if current_app.config.get('ENABLE_OSS'):
                 try:
                     pdf_url = OSSService().upload_pdf(pdf_buffer, f"diagnosis/{diagnosis_id}.pdf")
@@ -91,16 +92,16 @@ class DiagnosisService:
             临床信息：{clinical_info}
 
             请提供专业的诊断报告，包括以下部分：
-            1.请你先判断是否有病人是否患病 
-            2. 影像描述
-            3. 影像学表现  
+            1. 请你判断是否有病人是否患病 
+            2. 影像描述 (暂时不用回答)
+            3. 影像学表现  (暂时不用回答)
             4. 诊断意见
             5. 建议
 
             要求：
-            1. 使用专业、准确的医学语言进行描述
+            1. 使用直白、准确的医学语言进行描述，不用太专业
             2. 报告结尾包含"报告医师：放射科主治医师 AI助手"和"审核医师：放射科副主任医师 AI助手"
-            4.  全英文描述
+            4. 使用中文进行回答
             分段
             """
 
@@ -179,15 +180,24 @@ class DiagnosisService:
 
             # 注册中文字体（优先使用Noto Serif CJK SC作为备选）
             try:
+                # 尝试注册多种中文字体
                 pdfmetrics.registerFont(TTFont('NotoSerifCJKSC', 'NotoSerifCJK-Regular.ttc'))  # Noto Serif CJK SC
                 pdfmetrics.registerFont(TTFont('SimSun', 'SimSun.ttf'))  # 宋体
                 pdfmetrics.registerFont(TTFont('MicrosoftYaHei', 'msyh.ttc'))  # 微软雅黑
-                addMapping('NotoSerifCJKSC', 0, 0)  # 设置映射
-                addMapping('SimSun', 0, 0)
-                addMapping('MicrosoftYaHei', 0, 0)
+                addMapping('NotoSerifCJKSC', 0, 0, 'NotoSerifCJKSC')  # 设置映射
+                addMapping('SimSun', 0, 0, 'SimSun')
+                addMapping('MicrosoftYaHei', 0, 0, 'MicrosoftYaHei')
+                # 使用中文字体
+                chinese_font = 'NotoSerifCJKSC'
             except:
-                # 如果找不到字体文件，使用默认字体并添加警告
-                pass
+                # 如果找不到字体文件，尝试使用系统默认中文字体
+                try:
+                    pdfmetrics.registerFont(TTFont('Songti', 'C:/Windows/Fonts/simsun.ttc'))
+                    chinese_font = 'Songti'
+                except:
+                    # 如果还找不到，则使用Helvetica并添加警告
+                    chinese_font = 'Helvetica'
+                    pass
 
             # 检查样式是否已存在，避免重复定义
             if 'CustomTitle' not in styles:
@@ -197,7 +207,7 @@ class DiagnosisService:
                     fontSize=16,
                     textColor=colors.darkblue,
                     spaceAfter=30,
-                    fontName='NotoSerifCJKSC' if 'NotoSerifCJKSC' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
+                    fontName=chinese_font
                 ))
 
             if 'CustomBodyText' not in styles:
@@ -206,9 +216,9 @@ class DiagnosisService:
                     parent=styles['BodyText'],
                     fontSize=10,
                     spaceAfter=12,
-                    fontName='NotoSerifCJKSC' if 'NotoSerifCJKSC' in pdfmetrics.getRegisteredFontNames() else 'Helvetica',
+                    fontName=chinese_font,
                     wordWrap='CJK',  # 确保中日韩文字换行
-                    leading=12  # 调整行距以适应中文
+                    leading=15  # 调整行距以适应中文
                 ))
 
             # 构建内容
@@ -234,14 +244,12 @@ class DiagnosisService:
                     ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                    ('FONTNAME', (0, 0), (-1, 0),
-                     'NotoSerifCJKSC' if 'NotoSerifCJKSC' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'),
+                    ('FONTNAME', (0, 0), (-1, 0), chinese_font),
                     ('FONTSIZE', (0, 0), (-1, -1), 10),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                    ('FONTNAME', (0, 1), (-1, -1),
-                     'NotoSerifCJKSC' if 'NotoSerifCJKSC' in pdfmetrics.getRegisteredFontNames() else 'Helvetica')
+                    ('FONTNAME', (0, 1), (-1, -1), chinese_font)
                 ]))
                 story.append(patient_table)
                 story.append(Spacer(1, 0.3 * inch))
@@ -260,7 +268,8 @@ class DiagnosisService:
             # 处理诊断报告内容，确保即使为空也能正常生成PDF
             if diagnosis_report:
                 # 尝试处理可能的Markdown格式或特殊字符
-                formatted_report = diagnosis_report.replace('\n', '<br/>')
+                # 确保正确处理换行符和特殊字符
+                formatted_report = diagnosis_report.replace('\n\n', '<br/><br/>').replace('\n', '<br/>')
                 diagnosis_content = Paragraph(formatted_report, styles['CustomBodyText'])
                 story.append(diagnosis_content)
             else:
@@ -287,7 +296,7 @@ class DiagnosisService:
                         fontSize=16,
                         textColor=colors.darkblue,
                         spaceAfter=30,
-                        fontName='NotoSerifCJKSC' if 'NotoSerifCJKSC' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
+                        fontName='Helvetica'
                     ))
 
                 story = []
