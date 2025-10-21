@@ -1,2 +1,9 @@
 .env
 .idea/
+/docs/diagnosis_report_diag_7ecf0d1efab7.pdf
+/docs/diagnosis_report_diag_88a05a96aeb1.pdf
+/docs/diagnosis_report_diag_6704a40dd19c.pdf
+/logs/access.log
+/logs/
+/logs/app.log
+/logs/error.log

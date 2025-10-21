@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class DiagnosisService:
-    # todo 带完善
+    # todo redis缓存 但是感觉太大了 设置ttl 使用db存储
     # 内存中存储诊断记录（生产环境应使用数据库）
     _diagnosis_records = {}
 
