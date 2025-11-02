@@ -20,6 +20,7 @@ def submit_diagnosis():
 
         image_file = request.files['image']
         clinical_info = request.form.get('clinical_info', '').strip()
+        model_name = request.form.get('model_name', '').strip()  # 新增的模型名称参数
 
         if image_file.filename == '':
             return ResponseUtil.error('没有选择文件', code=400)
@@ -39,7 +40,8 @@ def submit_diagnosis():
         result = DiagnosisService.process_diagnosis(
             image_file=image_file,
             clinical_info=clinical_info,
-            patient_info=patient_info
+            patient_info=patient_info,
+            model_name=model_name  # 传递模型名称参数
         )
 
         return ResponseUtil.success(
@@ -118,13 +120,13 @@ def get_diagnosis_detail(diagnosis_id):
         return ResponseUtil.error(f'查询诊断详情失败: {str(e)}', code=500)
 
 
-@diagnosis_bp.route('/docs/<path:filename>')
-def serve_local_pdf(filename):
-    """
-    提供本地PDF文件访问
-    """
-    try:
-        docs_dir = os.path.join(current_app.root_path, '..', 'docs')
-        return send_from_directory(docs_dir, filename, as_attachment=True)
-    except Exception as e:
-        return ResponseUtil.error(f'文件不存在: {str(e)}', code=404)
+# @diagnosis_bp.route('/docs/<path:filename>')
+# def serve_local_pdf(filename):
+#     """
+#     提供本地PDF文件访问
+#     """
+#     try:
+#         docs_dir = os.path.join(current_app.root_path, '..', 'docs')
+#         return send_from_directory(docs_dir, filename, as_attachment=True)
+#     except Exception as e:
+#         return ResponseUtil.error(f'文件不存在: {str(e)}', code=404)

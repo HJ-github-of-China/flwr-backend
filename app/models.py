@@ -31,6 +31,41 @@ class DataStatus(enum.Enum):
     REJECTED = 'rejected'
 
 
+class DiagnosisRecord(db.Model):
+    """诊断记录模型"""
+    __tablename__ = 'diagnosis_record'
+    
+    diagnosis_id = db.Column(db.String(50), primary_key=True, comment='诊断ID')
+    patient_name = db.Column(db.String(100), comment='患者姓名')
+    patient_gender = db.Column(db.String(10), comment='患者性别')
+    patient_age = db.Column(db.String(10), comment='患者年龄')
+    medical_record_id = db.Column(db.String(100), comment='病历号')
+    clinical_info = db.Column(db.Text, comment='临床信息')
+    diagnosis_report = db.Column(db.Text, comment='诊断报告')
+    pdf_url = db.Column(db.String(500), comment='PDF报告URL')
+    model_name = db.Column(db.String(100), comment='使用的模型名称')
+    status = db.Column(db.String(20), default='completed', comment='诊断状态')
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'diagnosis_id': self.diagnosis_id,
+            'patient_name': self.patient_name,
+            'patient_gender': self.patient_gender,
+            'patient_age': self.patient_age,
+            'medical_record_id': self.medical_record_id,
+            'clinical_info': self.clinical_info,
+            'diagnosis_report': self.diagnosis_report,
+            'pdf_url': self.pdf_url,
+            'model_name': self.model_name,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
 class FederatedData(db.Model):
     """联邦学习数据模型"""
     __tablename__ = 'federated_data'

@@ -13,6 +13,7 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from app.services.oss_service import OSSService
 from app.utils import FileUtil
+from app.models import DiagnosisRecord, db
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class DiagnosisService:
     _diagnosis_records = {}
 
     @classmethod
-    def process_diagnosis(cls, image_file, clinical_info, patient_info):
+    def process_diagnosis(cls, image_file, clinical_info, patient_info, model_name=''):
         """
         处理诊断请求
         """
@@ -63,8 +64,25 @@ class DiagnosisService:
             if not pdf_url:
                 pdf_url = cls._save_pdf_locally(pdf_buffer, diagnosis_id)
 
-            # 保存诊断记录
-            diagnosis_record = {
+            # 保存诊断记录到数据库
+            diagnosis_record = DiagnosisRecord(
+                diagnosis_id=diagnosis_id,
+                patient_name=patient_info.get('name', ''),
+                patient_gender=patient_info.get('gender', ''),
+                patient_age=patient_info.get('age', ''),
+                medical_record_id=patient_info.get('medical_record_id', ''),
+                clinical_info=clinical_info,
+                diagnosis_report=diagnosis_report,
+                pdf_url=pdf_url,
+                model_name=model_name,
+                status='completed'
+            )
+            
+            db.session.add(diagnosis_record)
+            db.session.commit()
+            
+            # 同时保存到内存中以保持向后兼容
+            diagnosis_record_dict = {
                 'diagnosis_id': diagnosis_id,
                 'patient_info': patient_info,
                 'clinical_info': clinical_info,
@@ -73,16 +91,17 @@ class DiagnosisService:
                 'timestamp': datetime.now().isoformat(),
                 'status': 'completed'
             }
-            cls._diagnosis_records[diagnosis_id] = diagnosis_record
+            cls._diagnosis_records[diagnosis_id] = diagnosis_record_dict
 
             return {
                 'diagnosis_id': diagnosis_id,
                 'diagnosis_report': diagnosis_report,
-                'timestamp': diagnosis_record['timestamp'],
+                'timestamp': diagnosis_record_dict['timestamp'],
                 'pdf_url': pdf_url,
             }
 
         except Exception as e:
+            db.session.rollback()
             logger.error(f"诊断处理失败: {str(e)}", exc_info=True)
             raise Exception(f"诊断处理失败: {str(e)}")
 
@@ -377,17 +396,32 @@ class DiagnosisService:
         获取诊断PDF报告
         """
         try:
-            # 从存储中获取诊断记录
-            record = cls._diagnosis_records.get(diagnosis_id)
+            # 从数据库获取诊断记录
+            record = db.session.query(DiagnosisRecord).filter_by(diagnosis_id=diagnosis_id).first()
             if not record:
-                return None
+                # 如果数据库中没有，尝试从内存中获取
+                record = cls._diagnosis_records.get(diagnosis_id)
+                if not record:
+                    return None
 
             # 重新生成PDF（或从OSS下载）
-            pdf_buffer = cls._create_pdf_report(
-                record['clinical_info'],
-                record['diagnosis_report'],
-                record['patient_info']
-            )
+            if isinstance(record, DiagnosisRecord):
+                pdf_buffer = cls._create_pdf_report(
+                    record.clinical_info,
+                    record.diagnosis_report,
+                    {
+                        'name': record.patient_name,
+                        'gender': record.patient_gender,
+                        'age': record.patient_age,
+                        'medical_record_id': record.medical_record_id
+                    }
+                )
+            else:
+                pdf_buffer = cls._create_pdf_report(
+                    record['clinical_info'],
+                    record['diagnosis_report'],
+                    record['patient_info']
+                )
 
             return pdf_buffer
 
@@ -401,31 +435,30 @@ class DiagnosisService:
         获取诊断历史记录
         """
         try:
-            # 过滤记录
-            records = list(cls._diagnosis_records.values())
-
+            # 从数据库获取诊断记录
+            query = db.session.query(DiagnosisRecord)
+            
             if patient_name:
-                records = [r for r in records if r['patient_info'].get('name') == patient_name]
-
-            # 排序
-            records.sort(key=lambda x: x['timestamp'], reverse=True)
-
-            # 分页
-            total = len(records)
-            start_idx = (page - 1) * per_page
-            end_idx = start_idx + per_page
-            paginated_records = records[start_idx:end_idx]
+                query = query.filter(DiagnosisRecord.patient_name == patient_name)
+            
+            # 排序和分页
+            records = query.order_by(DiagnosisRecord.created_at.desc())\
+                          .offset((page - 1) * per_page)\
+                          .limit(per_page)\
+                          .all()
+            
+            # 获取总记录数
+            total = query.count()
 
             # 构建返回数据
             diagnosis_list = []
-            for record in paginated_records:
+            for record in records:
                 diagnosis_list.append({
-                    'diagnosis_id': record['diagnosis_id'],
-                    'patient_name': record['patient_info'].get('name', ''),
-                    'clinical_info': record['clinical_info'][:100] + '...' if len(record['clinical_info']) > 100 else
-                    record['clinical_info'],
-                    'timestamp': record['timestamp'],
-                    'status': record['status']
+                    'diagnosis_id': record.diagnosis_id,
+                    'patient_name': record.patient_name,
+                    'clinical_info': record.clinical_info[:100] + '...' if len(record.clinical_info) > 100 else record.clinical_info,
+                    'timestamp': record.created_at.isoformat(),
+                    'status': record.status
                 })
 
             return {
@@ -448,19 +481,40 @@ class DiagnosisService:
         获取诊断详情
         """
         try:
-            record = cls._diagnosis_records.get(diagnosis_id)
+            # 从数据库获取诊断记录
+            record = db.session.query(DiagnosisRecord).filter_by(diagnosis_id=diagnosis_id).first()
             if not record:
-                return None
+                # 如果数据库中没有，尝试从内存中获取
+                record = cls._diagnosis_records.get(diagnosis_id)
+                if not record:
+                    return None
 
-            return {
-                'diagnosis_id': record['diagnosis_id'],
-                'patient_info': record['patient_info'],
-                'clinical_info': record['clinical_info'],
-                'diagnosis_report': record['diagnosis_report'],
-                'timestamp': record['timestamp'],
-                'status': record['status'],
-                'pdf_url': record['pdf_url'] or f"/api/diagnosis/download/{diagnosis_id}"
-            }
+            # 构建返回数据
+            if isinstance(record, DiagnosisRecord):
+                return {
+                    'diagnosis_id': record.diagnosis_id,
+                    'patient_info': {
+                        'name': record.patient_name,
+                        'gender': record.patient_gender,
+                        'age': record.patient_age,
+                        'medical_record_id': record.medical_record_id
+                    },
+                    'clinical_info': record.clinical_info,
+                    'diagnosis_report': record.diagnosis_report,
+                    'timestamp': record.created_at.isoformat(),
+                    'status': record.status,
+                    'pdf_url': record.pdf_url or f"/api/diagnosis/download/{record.diagnosis_id}"
+                }
+            else:
+                return {
+                    'diagnosis_id': record['diagnosis_id'],
+                    'patient_info': record['patient_info'],
+                    'clinical_info': record['clinical_info'],
+                    'diagnosis_report': record['diagnosis_report'],
+                    'timestamp': record['timestamp'],
+                    'status': record['status'],
+                    'pdf_url': record['pdf_url'] or f"/api/diagnosis/download/{record['diagnosis_id']}"
+                }
 
         except Exception as e:
             logger.error(f"获取诊断详情失败: {str(e)}", exc_info=True)
