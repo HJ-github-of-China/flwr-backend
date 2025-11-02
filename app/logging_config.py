@@ -4,7 +4,6 @@ from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from flask import Flask
 
 
-# TODO 修改展示暴露的ip和端口
 def setup_logging(app: Flask):
     
     """
@@ -26,22 +25,24 @@ def setup_logging(app: Flask):
         '%(asctime)s %(levelname)s %(name)s %(message)s'
     )
     
-    # 文件日志处理器 - 按大小轮转
-    file_handler = RotatingFileHandler(
+    # 文件日志处理器 - 按天轮转
+    file_handler = TimedRotatingFileHandler(
         os.path.join(logs_dir, 'app.log'),
-        maxBytes=app.config.get('LOG_FILE_MAX_BYTES', 1024 * 1024 * 10),  # 默认10MB
-        backupCount=app.config.get('LOG_FILE_BACKUP_COUNT', 10),
+        when='midnight',
+        interval=1,
+        backupCount=app.config.get('LOG_FILE_BACKUP_COUNT', 30),
         encoding='utf-8'
     )
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
     
-    # 错误日志处理器 - 专门记录错误信息
-    error_handler = RotatingFileHandler(
+    # 错误日志处理器 - 按天轮转
+    error_handler = TimedRotatingFileHandler(
         os.path.join(logs_dir, 'error.log'),
-        maxBytes=app.config.get('LOG_FILE_MAX_BYTES', 1024 * 1024 * 10),  # 默认10MB
-        backupCount=app.config.get('LOG_FILE_BACKUP_COUNT', 10),
+        when='midnight',
+        interval=1,
+        backupCount=app.config.get('LOG_FILE_BACKUP_COUNT', 30),
         encoding='utf-8'
     )
     error_handler.setLevel(logging.ERROR)
@@ -58,9 +59,14 @@ def setup_logging(app: Flask):
     )
     access_handler.setLevel(logging.INFO)
     access_formatter = logging.Formatter(
-        '%(asctime)s %(remote_addr)s %(url)s %(status_code)s %(response_time)f'
+        '%(asctime)s %(remote_addr)s:%(remote_port)s %(request_method)s %(url)s %(status_code)s %(response_time)f'
     )
     access_handler.setFormatter(access_formatter)
+    
+    # 访问日志控制台处理器
+    access_console_handler = logging.StreamHandler()
+    access_console_handler.setLevel(logging.INFO)
+    access_console_handler.setFormatter(access_formatter)
     
     # 只在非调试模式下添加控制台处理器，避免日志重复
     if not app.debug:
@@ -69,6 +75,12 @@ def setup_logging(app: Flask):
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
+    
+    # 控制台日志处理器（始终添加）
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
     
     # 配置Flask应用使用日志
     app.logger.setLevel(log_level)
@@ -79,7 +91,6 @@ def setup_logging(app: Flask):
         from flask import request, g
         import time
         g.start_time = time.time()
-        request.environ['REMOTE_ADDR'] = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
     
     @app.after_request
     def after_request(response):
@@ -91,24 +102,54 @@ def setup_logging(app: Flask):
         else:
             response_time = 0
         
+        # 获取客户端IP地址
+        if request.environ.get('HTTP_X_FORWARDED_FOR') is None:
+            remote_addr = request.environ.get('REMOTE_ADDR', 'unknown')
+        else:
+            remote_addr = request.environ.get('HTTP_X_FORWARDED_FOR', 'unknown')
+            
         access_info = {
-            'remote_addr': request.environ.get('REMOTE_ADDR', 'unknown'),
+            'remote_addr': remote_addr,
+            'remote_port': request.environ.get('REMOTE_PORT', 'unknown'),
+            'request_method': request.method,
             'url': request.url,
             'status_code': response.status_code,
             'response_time': response_time
         }
         
-        # 使用专门的访问日志记录器
-        access_logger = logging.getLogger('access')
-        access_logger.setLevel(logging.INFO)
-        access_logger.addHandler(access_handler)
-        access_logger.propagate = False  # 防止传播到根日志记录器
-        
-        access_logger.info(
-            '%(remote_addr)s %(url)s %(status_code)s %(response_time)f',
-            access_info,
-            extra=access_info
+        # 直接使用app.logger记录访问信息，确保在控制台可见
+        app.logger.info(
+            f"{access_info['remote_addr']}:{access_info['remote_port']} "
+            f"{access_info['request_method']} {access_info['url']} "
+            f"{access_info['status_code']} {access_info['response_time']:.6f}"
         )
+        
+        # 同时写入访问日志文件
+        try:
+            access_handler = TimedRotatingFileHandler(
+                os.path.join(logs_dir, 'access.log'),
+                when='midnight',
+                interval=1,
+                backupCount=app.config.get('ACCESS_LOG_FILE_BACKUP_COUNT', 30),
+                encoding='utf-8'
+            )
+            access_formatter = logging.Formatter(
+                '%(asctime)s %(remote_addr)s:%(remote_port)s %(request_method)s %(url)s %(status_code)s %(response_time)f'
+            )
+            access_handler.setFormatter(access_formatter)
+            access_handler.setLevel(logging.INFO)
+            
+            access_logger = logging.getLogger('access_logger')
+            access_logger.setLevel(logging.INFO)
+            access_logger.addHandler(access_handler)
+            access_logger.propagate = False
+            
+            access_logger.info(
+                '%(remote_addr)s:%(remote_port)s %(request_method)s %(url)s %(status_code)s %(response_time)f',
+                extra=access_info
+            )
+        except Exception as e:
+            app.logger.error(f"无法写入访问日志文件: {e}")
         
         return response
     
