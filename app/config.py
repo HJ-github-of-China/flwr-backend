@@ -17,9 +17,9 @@ class Config:
         'pool_pre_ping': True
     }
 
-    # TODO JWT配置
-    # JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY') or 'jwt-secret-key'
-    # JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
+    # JWT配置
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY') or 'your-super-secret-jwt-key-change-in-production'
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
 
     # 阿里云OSS配置
     OSS_ACCESS_KEY_ID = os.getenv('OSS_ACCESS_KEY_ID')

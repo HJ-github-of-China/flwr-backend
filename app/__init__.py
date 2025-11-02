@@ -28,9 +28,11 @@ def create_app(config_name='default'):
     setup_logging(app)
 
     # 注册蓝图
+    from app.routes.auth_routes import auth_bp
     from app.routes.federated_data_routes import federated_data_bp
     from app.routes.model_routes import model_bp
     from app.routes.diagnosis_routes import diagnosis_bp  # 新增导入诊断蓝图
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(federated_data_bp)
     app.register_blueprint(model_bp)
     app.register_blueprint(diagnosis_bp)  # 注册诊断蓝图

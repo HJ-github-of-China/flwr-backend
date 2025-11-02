@@ -1,7 +1,9 @@
+import bcrypt
+import jwt
+from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
-
 """
 对应 Spring Boot 中的 @Entity 实体类和 @Repository 数据访问接口
 进行表格和字典的映射配置
@@ -45,8 +47,8 @@ class DiagnosisRecord(db.Model):
     pdf_url = db.Column(db.String(500), comment='PDF报告URL')
     model_name = db.Column(db.String(100), comment='使用的模型名称')
     status = db.Column(db.String(20), default='completed', comment='诊断状态')
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, comment='创建时间')
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), comment='更新时间')
 
     def to_dict(self):
         """转换为字典"""
@@ -74,10 +76,10 @@ class FederatedData(db.Model):
     image_url = db.Column(db.String(500), nullable=False, comment='原始图片URL')
     case_description = db.Column(db.Text, nullable=False, comment='病情描述')
     data_type = db.Column(db.String(20), default='chest_xray', comment='图片类型')
-    upload_time = db.Column(db.DateTime, default=datetime.now, nullable=False, comment='上传时间')
+    upload_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, comment='上传时间')
     data_status = db.Column(db.String(20), default='pending', comment='数据状态')
     is_deleted = db.Column(db.Boolean, default=False, comment='软删除标记')
-    updated_time = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    updated_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), comment='更新时间')
 
     def to_dict(self):
         """转换为字典"""
@@ -118,8 +120,8 @@ class Model(db.Model):
     model_status = db.Column(db.String(20), default='training', comment='模型状态')
     model_path = db.Column(db.String(500), comment='模型文件存储路径')
     description = db.Column(db.Text, comment='模型描述')
-    created_time = db.Column(db.DateTime, nullable=False, default=datetime.now, comment='创建时间')
-    updated_time = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    created_time = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), comment='创建时间')
+    updated_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), comment='更新时间')
     is_deleted = db.Column(db.Boolean, default=False, comment='软删除标记')
 
     def to_dict(self):
@@ -140,3 +142,91 @@ class Model(db.Model):
 
     def __repr__(self):
         return f'<Model {self.model_name} v{self.model_version}>'
+
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    user_id = db.Column(db.Integer, primary_key=True, comment='用户ID')
+    username = db.Column(db.String(50), unique=True, nullable=False, comment='用户名')
+    email = db.Column(db.String(100), unique=True, comment='邮箱')
+    password_hash = db.Column(db.String(255), nullable=False, comment='密码哈希')
+    full_name = db.Column(db.String(100), comment='真实姓名')
+    role = db.Column(db.String(20), default='doctor', comment='用户角色')
+    department = db.Column(db.String(100), comment='所属部门')
+    avatar_url = db.Column(db.String(500), comment='头像URL')
+    phone = db.Column(db.String(20), comment='手机号')
+    is_active = db.Column(db.Boolean, default=True, comment='是否激活')
+    last_login = db.Column(db.DateTime, comment='最后登录时间')
+    created_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), comment='创建时间')
+    updated_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), comment='更新时间')
+
+    def set_password(self, password):
+        """设置密码"""
+        salt = bcrypt.gensalt()
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+    def check_password(self, password):
+        """验证密码"""
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+        except ValueError as e:
+            # 处理无效盐值异常，返回False表示密码不匹配
+            return False
+        except Exception as e:
+            # 处理其他异常，记录日志并返回False
+            return False
+
+    def generate_token(self):
+        """生成JWT token"""
+        payload = {
+            'user_id': self.user_id,
+            'username': self.username,
+            'role': self.role,
+            'exp': datetime.now(timezone.utc) + current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
+        }
+        return jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+
+    def to_dict(self):
+        """转换为字典格式"""
+        return {
+            'user_id': self.user_id,
+            'username': self.username,
+            'email': self.email,
+            'full_name': self.full_name,
+            'role': self.role,
+            'department': self.department,
+            'avatar_url': self.avatar_url,
+            'phone': self.phone,
+            'is_active': self.is_active,
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'created_time': self.created_time.isoformat() if self.created_time else None
+        }
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+
+class LoginLog(db.Model):
+    __tablename__ = 'login_logs'
+
+    log_id = db.Column(db.Integer, primary_key=True, comment='日志ID')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, comment='用户ID')
+    login_ip = db.Column(db.String(45), comment='登录IP')
+    user_agent = db.Column(db.Text, comment='用户代理')
+    login_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), comment='登录时间')
+    status = db.Column(db.String(20), comment='登录状态')
+    failure_reason = db.Column(db.String(200), comment='失败原因')
+
+    user = db.relationship('User', backref=db.backref('login_logs', lazy=True))
+
+    def to_dict(self):
+        return {
+            'log_id': self.log_id,
+            'user_id': self.user_id,
+            'login_ip': self.login_ip,
+            'user_agent': self.user_agent,
+            'login_time': self.login_time.isoformat() if self.login_time else None,
+            'status': self.status,
+            'failure_reason': self.failure_reason
+        }
