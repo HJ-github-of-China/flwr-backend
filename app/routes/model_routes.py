@@ -1,40 +1,15 @@
 from flask import Blueprint, request, current_app
 from app.services.model_service import ModelService
 from app.utils import ResponseUtil
-from functools import wraps
+from app.utils.auth import token_required, roles_required
 
 model_bp = Blueprint('model', __name__, url_prefix='/api')
 
 
-# def token_required(f):
-#     """Token认证装饰器"""
-#
-#     @wraps(f)
-#     def decorated(*args, **kwargs):
-#         token = request.headers.get('Authorization')
-#         if not token:
-#             return ResponseUtil.error(401, "未授权访问")
-#
-#         try:
-#             # 移除Bearer前缀
-#             if token.startswith('Bearer '):
-#                 token = token[7:]
-#
-#             # 验证token
-#             jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-#         except jwt.ExpiredSignatureError:
-#             return ResponseUtil.error(401, "Token已过期")
-#         except jwt.InvalidTokenError:
-#             return ResponseUtil.error(401, "无效Token")
-#
-#         return f(*args, **kwargs)
-#
-#     return decorated
-
-
 @model_bp.route('/models', methods=['POST'])
-# # @token_required
-def create_model():
+@token_required
+@roles_required('admin')
+def create_model(current_user):
     """创建新模型"""
     data = request.get_json()
 
@@ -60,8 +35,8 @@ def create_model():
 
 
 @model_bp.route('/models', methods=['GET'])
-# @token_required
-def get_models():
+@token_required
+def get_models(current_user):
     """查询模型列表（支持分页、搜索、筛选）"""
     try:
         # 获取查询参数
@@ -101,8 +76,8 @@ def get_models():
 
 
 @model_bp.route('/models/<int:model_id>', methods=['GET'])
-# @token_required
-def get_model_detail(model_id):
+@token_required
+def get_model_detail(current_user, model_id):
     """获取模型详细信息"""
     model = ModelService.get_model_by_id(model_id)
 
@@ -113,8 +88,9 @@ def get_model_detail(model_id):
 
 
 @model_bp.route('/models/<int:model_id>', methods=['PUT'])
-# @token_required
-def update_model(model_id):
+@token_required
+@roles_required('admin')
+def update_model(current_user, model_id):
     """更新模型参数"""
     data = request.get_json()
 
@@ -133,8 +109,9 @@ def update_model(model_id):
 
 
 @model_bp.route('/models/<int:model_id>', methods=['DELETE'])
-# @token_required
-def delete_model(model_id):
+@token_required
+@roles_required('admin')
+def delete_model(current_user, model_id):
     """软删除模型"""
     success, error = ModelService.delete_model(model_id)
 
@@ -145,8 +122,8 @@ def delete_model(model_id):
 
 
 @model_bp.route('/models/options', methods=['GET'])
-# @token_required
-def get_model_options():
+@token_required
+def get_model_options(current_user):
     """获取模型相关选项"""
     try:
         options = {

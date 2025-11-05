@@ -4,11 +4,13 @@ import io
 import os
 
 from app.utils import ResponseUtil
+from app.utils.auth import token_required
 
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
 
 @diagnosis_bp.route('/api/diagnosis/submit', methods=['POST'])
+@token_required
 def submit_diagnosis():
     """
     提交诊断请求
@@ -54,6 +56,7 @@ def submit_diagnosis():
 
 
 @diagnosis_bp.route('/api/diagnosis/download/<diagnosis_id>', methods=['GET'])
+@token_required
 def download_report(diagnosis_id):
     """
     下载诊断报告PDF
@@ -76,6 +79,8 @@ def download_report(diagnosis_id):
 
 
 @diagnosis_bp.route('/api/diagnosis/history', methods=['GET'])
+# todo 修改一下 我已经进行持久化操作勒
+@token_required
 def get_diagnosis_history():
     """
     获取诊断历史记录
@@ -101,6 +106,7 @@ def get_diagnosis_history():
 
 
 @diagnosis_bp.route('/api/diagnosis/detail/<diagnosis_id>', methods=['GET'])
+@token_required
 def get_diagnosis_detail(diagnosis_id):
     """
     获取诊断详情

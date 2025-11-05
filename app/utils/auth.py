@@ -11,15 +11,8 @@ def token_required(f):
         
         # 从header获取token
         if 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            try:
-                token = auth_header.split(" ")[1]  # Bearer <token>
-            except IndexError:
-                return {
-                    "code": 401,
-                    "message": "Invalid token format",
-                    "data": None
-                }, 401
+            # 直接使用Authorization头中的JWT令牌
+            token = request.headers['Authorization']
         
         if not token:
             return {
@@ -61,7 +54,16 @@ def token_required(f):
         
         # 将当前用户存储在全局对象中
         g.current_user = current_user
-        return f(current_user, *args, **kwargs)
+        
+        # 检查被装饰的函数是否接受参数，如果接受则传入current_user
+        import inspect
+        sig = inspect.signature(f)
+        if len(sig.parameters) > 0:
+            # 如果函数有参数，则传递current_user作为第一个参数
+            return f(current_user, *args, **kwargs)
+        else:
+            # 如果函数没有参数，则不传递current_user
+            return f(*args, **kwargs)
     
     return decorated
 

@@ -4,6 +4,8 @@ from app.services.oss_service import oss_service
 from app.utils import ResponseUtil, allowed_file
 from functools import wraps
 
+from app.utils.auth import token_required
+
 federated_data_bp = Blueprint('federated_data', __name__)
 
 
@@ -34,7 +36,7 @@ federated_data_bp = Blueprint('federated_data', __name__)
 
 
 @federated_data_bp.route('/api/v1/federated-data', methods=['POST'])
-# @token_required
+@token_required
 def create_data():
     """创建新数据"""
     # 处理文件上传和表单数据
@@ -74,7 +76,7 @@ def create_data():
 
 
 @federated_data_bp.route('/api/v1/federated-data/<int:data_id>', methods=['DELETE'])
-# @token_required
+@token_required
 def delete_data(data_id):
     """删除数据"""
     success, error = FederatedDataService.delete_data(data_id)
@@ -86,7 +88,7 @@ def delete_data(data_id):
 
 
 @federated_data_bp.route('/api/v1/federated-data', methods=['GET'])
-# @token_required
+@token_required
 def get_data_list():
     """获取数据列表（分页）"""
     page = request.args.get('page', 1, type=int)
@@ -104,7 +106,7 @@ def get_data_list():
 
 
 @federated_data_bp.route('/api/v1/federated-data/search', methods=['GET'])
-# @token_required
+@token_required
 def search_data():
     """根据关键词搜索"""
     keyword = request.args.get('keyword')
@@ -124,7 +126,7 @@ def search_data():
 
 
 @federated_data_bp.route('/api/v1/federated-data/by-time', methods=['GET'])
-# @token_required
+@token_required
 def get_data_by_time():
     """根据时间范围查询"""
     start_time = request.args.get('startTime')
@@ -146,7 +148,7 @@ def get_data_by_time():
 
 
 @federated_data_bp.route('/api/v1/federated-data/<int:data_id>', methods=['PUT'])
-# @token_required
+@token_required
 def update_data(data_id):
     """更新数据"""
     data = request.get_json()
@@ -172,7 +174,7 @@ def update_data(data_id):
 
 
 @federated_data_bp.route('/api/v1/upload/image', methods=['POST'])
-# @token_required
+@token_required
 def upload_image():
     """上传图片到OSS"""
     if 'file' not in request.files:
