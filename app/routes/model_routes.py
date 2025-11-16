@@ -135,3 +135,34 @@ def get_model_options(current_user):
         return ResponseUtil.success(options)
     except Exception as e:
         return ResponseUtil.error(500, f"获取选项失败: {str(e)}")
+
+
+@model_bp.route('/models/<int:model_id>/training-metrics/chart', methods=['GET'])
+@token_required
+def get_model_training_metrics_chart(current_user, model_id):
+    """获取模型训练指标数据，用于ECharts可视化展示"""
+    try:
+        # 获取查询参数
+        start_epoch = request.args.get('start_epoch', 1, type=int)
+        end_epoch = request.args.get('end_epoch', 0, type=int)  # 0表示获取所有
+        metrics = request.args.get('metrics', 'loss,accuracy,recall,prec,f1', type=str)
+        
+        # 解析需要的指标
+        requested_metrics = [m.strip() for m in metrics.split(',') if m.strip()]
+        
+        # 获取模型信息
+        model = ModelService.get_model_by_id(model_id)
+        if not model:
+            return ResponseUtil.error(404, "模型不存在")
+        
+        # 生成模拟的训练指标数据（实际项目中应该从数据库或文件中获取）
+        chart_data = ModelService.get_model_training_metrics_chart_data(
+            model_id, start_epoch, end_epoch, requested_metrics)
+        
+        if not chart_data:
+            return ResponseUtil.error(404, "未找到训练指标数据")
+        
+        return ResponseUtil.success(chart_data)
+        
+    except Exception as e:
+        return ResponseUtil.error(500, f"获取训练指标数据失败: {str(e)}")

@@ -4,6 +4,7 @@ from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
 import enum
+import json
 """
 对应 Spring Boot 中的 @Entity 实体类和 @Repository 数据访问接口
 进行表格和字典的映射配置
@@ -104,6 +105,35 @@ class FederatedData(db.Model):
         }
 
 
+class TrainingMetric(db.Model):
+    """模型训练指标模型"""
+    __tablename__ = 'training_metrics'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment='指标ID')
+    model_id = db.Column(db.Integer, nullable=False, comment='模型ID')
+    epoch = db.Column(db.Integer, nullable=False, comment='训练轮次')
+    loss = db.Column(db.Float, comment='损失值')
+    accuracy = db.Column(db.Float, comment='准确率')
+    recall = db.Column(db.Float, comment='召回率')
+    prec = db.Column(db.Float, comment='精确率')  # 修改字段名为prec，避免使用MySQL关键字
+    f1 = db.Column(db.Float, comment='F1分数')  # 修改字段名为f1，匹配数据库实际字段
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, comment='创建时间')
+    
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'model_id': self.model_id,
+            'epoch': self.epoch,
+            'loss': self.loss,
+            'accuracy': self.accuracy,
+            'recall': self.recall,
+            'prec': self.prec,  # 修改为prec
+            'f1': self.f1,  # 修改为f1
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class Model(db.Model):
     """模型仓库模型"""
     __tablename__ = 'model'
@@ -123,6 +153,8 @@ class Model(db.Model):
     created_time = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), comment='创建时间')
     updated_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), comment='更新时间')
     is_deleted = db.Column(db.Boolean, default=False, comment='软删除标记')
+    
+    # 注意：训练指标数据存储在单独的TrainingMetric表中，通过model_id关联
 
     def to_dict(self):
         """转换为字典格式"""
@@ -211,14 +243,12 @@ class LoginLog(db.Model):
     __tablename__ = 'login_logs'
 
     log_id = db.Column(db.Integer, primary_key=True, comment='日志ID')
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, comment='用户ID')
+    user_id = db.Column(db.Integer, nullable=False, comment='用户ID')
     login_ip = db.Column(db.String(45), comment='登录IP')
     user_agent = db.Column(db.Text, comment='用户代理')
     login_time = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), comment='登录时间')
     status = db.Column(db.String(20), comment='登录状态')
     failure_reason = db.Column(db.String(200), comment='失败原因')
-
-    user = db.relationship('User', backref=db.backref('login_logs', lazy=True))
 
     def to_dict(self):
         return {
